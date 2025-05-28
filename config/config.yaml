@@ -1,0 +1,54 @@
+# MultiNic Agent Configuration Example
+# 이 파일은 로컬 개발용 예제입니다. 
+# 프로덕션에서는 환경변수나 ConfigMap/Secret을 사용하세요.
+
+# 데이터베이스 설정
+database:
+  host: "localhost"
+  port: 3306
+  username: "root"
+  password: "qudrjs1245!"
+  database: "multinic_db"
+  # MySQL 연결 옵션
+  charset: "utf8mb4"
+  parse_time: true
+  loc: "Local"
+
+# 에이전트 설정
+agent:
+  # 네트워크 정보 체크 주기 (초)
+  check_interval: 30
+  # 재시도 횟수
+  retry_count: 3
+  # 재시도 간격 (초)
+  retry_interval: 5
+  # 노드 이름 (DaemonSet에서는 Downward API로 주입)
+  node_name: "worker-node-1"
+
+# Kubernetes 설정
+kubernetes:
+  # kubeconfig 경로 (in-cluster 모드에서는 비워둠)
+  kubeconfig: ""
+  # 라벨/어노테이션 prefix
+  label_prefix: "multinic.io"
+  annotation_prefix: "multinic.io"
+
+# Netplan 설정
+netplan:
+  # netplan 설정 파일 경로
+  config_path: "/etc/netplan"
+  # 백업 디렉토리
+  backup_path: "/var/backups/netplan"
+  # dry-run 모드 (테스트용)
+  dry_run: false
+
+# 로깅 설정
+logging:
+  # 로그 레벨: debug, info, warn, error
+  level: "info"
+  # 로그 포맷: json, text
+  format: "text"
+  # 로그 출력: stdout, file
+  output: "stdout"
+  # 파일 출력 시 경로
+  file_path: "/var/log/multinic-agent.log" 
