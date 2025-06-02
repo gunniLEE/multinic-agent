@@ -17,15 +17,23 @@ type Client struct {
 	logger *zap.Logger
 }
 
-// NetworkInterface는 네트워크 인터페이스 정보입니다
-type NetworkInterface struct {
-	NodeName      string    `db:"node_name"`
-	InterfaceName string    `db:"interface_name"`
-	MacAddress    string    `db:"mac_address"`
-	IpAddress     string    `db:"ip_address"`
-	SubnetMask    string    `db:"subnet_mask"`
-	NetworkID     string    `db:"network_id"`
-	UpdatedAt     time.Time `db:"updated_at"`
+// NodeInterface는 노드의 네트워크 인터페이스 정보입니다 (조인된 결과)
+type NodeInterface struct {
+	InterfaceID    int       `db:"interface_id"`
+	PortID         string    `db:"port_id"`
+	NodeID         string    `db:"node_id"`
+	NodeName       string    `db:"node_name"`
+	MacAddress     string    `db:"macaddress"`
+	SubnetID       string    `db:"subnet_id"`
+	SubnetName     string    `db:"subnet_name"`
+	CIDR           string    `db:"cidr"`
+	NetworkID      string    `db:"network_id"`
+	CRNamespace    string    `db:"cr_namespace"`
+	CRName         string    `db:"cr_name"`
+	NetplanSuccess bool      `db:"netplan_success"`
+	Status         string    `db:"status"`
+	CreatedAt      time.Time `db:"created_at"`
+	ModifiedAt     time.Time `db:"modified_at"`
 }
 
 // NewClient는 새로운 데이터베이스 클라이언트를 생성합니다
@@ -77,19 +85,32 @@ func (c *Client) Close() error {
 }
 
 // GetNodeInterfaces는 특정 노드의 네트워크 인터페이스 정보를 조회합니다
-func (c *Client) GetNodeInterfaces(nodeName string) ([]NetworkInterface, error) {
+func (c *Client) GetNodeInterfaces(nodeName string) ([]NodeInterface, error) {
 	query := `
 		SELECT 
-			node_name,
-			interface_name,
-			mac_address,
-			ip_address,
-			subnet_mask,
-			network_id,
-			updated_at
-		FROM network_interfaces
-		WHERE node_name = ?
-		ORDER BY interface_name
+			mi.id as interface_id,
+			mi.port_id,
+			n.attached_node_id as node_id,
+			n.attached_node_name as node_name,
+			mi.macaddress,
+			ms.subnet_id,
+			ms.subnet_name,
+			ms.cidr,
+			ms.network_id,
+			mi.cr_namespace,
+			mi.cr_name,
+			mi.netplan_success,
+			mi.status,
+			mi.created_at,
+			mi.modified_at
+		FROM multi_interface mi
+		JOIN node_table n ON mi.attached_node_id = n.attached_node_id
+		JOIN multi_subnet ms ON mi.subnet_id = ms.subnet_id
+		WHERE n.attached_node_name = ? 
+		  AND mi.status = 'active'
+		  AND n.status = 'active'
+		  AND ms.status = 'active'
+		ORDER BY ms.subnet_name
 	`
 
 	rows, err := c.db.Query(query, nodeName)
@@ -98,17 +119,25 @@ func (c *Client) GetNodeInterfaces(nodeName string) ([]NetworkInterface, error) 
 	}
 	defer rows.Close()
 
-	var interfaces []NetworkInterface
+	var interfaces []NodeInterface
 	for rows.Next() {
-		var iface NetworkInterface
+		var iface NodeInterface
 		err := rows.Scan(
+			&iface.InterfaceID,
+			&iface.PortID,
+			&iface.NodeID,
 			&iface.NodeName,
-			&iface.InterfaceName,
 			&iface.MacAddress,
-			&iface.IpAddress,
-			&iface.SubnetMask,
+			&iface.SubnetID,
+			&iface.SubnetName,
+			&iface.CIDR,
 			&iface.NetworkID,
-			&iface.UpdatedAt,
+			&iface.CRNamespace,
+			&iface.CRName,
+			&iface.NetplanSuccess,
+			&iface.Status,
+			&iface.CreatedAt,
+			&iface.ModifiedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
@@ -126,4 +155,25 @@ func (c *Client) GetNodeInterfaces(nodeName string) ([]NetworkInterface, error) 
 	)
 
 	return interfaces, nil
+}
+
+// UpdateNetplanSuccess는 특정 인터페이스의 netplan 적용 성공 여부를 업데이트합니다
+func (c *Client) UpdateNetplanSuccess(portID string, success bool) error {
+	query := `
+		UPDATE multi_interface 
+		SET netplan_success = ?, modified_at = NOW()
+		WHERE port_id = ?
+	`
+
+	_, err := c.db.Exec(query, success, portID)
+	if err != nil {
+		return fmt.Errorf("failed to update netplan success: %w", err)
+	}
+
+	c.logger.Debug("Updated netplan success status",
+		zap.String("port_id", portID),
+		zap.Bool("success", success),
+	)
+
+	return nil
 }

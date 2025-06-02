@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multinic-agent-config
+  namespace: multinic-system
+  labels:
+    app.kubernetes.io/name: multinic-agent
+    app.kubernetes.io/component: config
+data:
+  # 데이터베이스 설정 (비밀번호 제외)
+  DB_HOST: "mysql.multinic-system.svc.cluster.local"
+  DB_PORT: "3306"
+  DB_USERNAME: "multinic"
+  DB_DATABASE: "multinic_db"
+  DB_CHARSET: "utf8mb4"
+  DB_PARSE_TIME: "true"
+  DB_LOC: "UTC"
+  
+  # 에이전트 설정
+  AGENT_CHECK_INTERVAL: "30"
+  AGENT_RETRY_COUNT: "3"
+  AGENT_RETRY_INTERVAL: "5"
+  
+  # Kubernetes 설정
+  K8S_LABEL_PREFIX: "multinic.io"
+  K8S_ANNOTATION_PREFIX: "multinic.io"
+  
+  # Netplan 설정
+  NETPLAN_CONFIG_PATH: "/etc/netplan"
+  NETPLAN_BACKUP_PATH: "/var/backups/netplan"
+  NETPLAN_DRY_RUN: "false"
+  
+  # 로깅 설정
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  LOG_OUTPUT: "stdout" 

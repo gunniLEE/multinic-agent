@@ -51,16 +51,41 @@ func main() {
 		}
 
 		for _, iface := range interfaces {
-			fmt.Printf("  • %s: %s (%s)\n",
-				iface.InterfaceName,
-				iface.IpAddress,
+			netplanIcon := "❌"
+			if iface.NetplanSuccess {
+				netplanIcon = "✅"
+			}
+
+			fmt.Printf("  • %s: %s %s\n",
+				iface.SubnetName,
 				iface.MacAddress,
+				netplanIcon,
 			)
-			fmt.Printf("    └─ Subnet: %s, Network ID: %s\n",
-				iface.SubnetMask,
-				iface.NetworkID,
-			)
+			fmt.Printf("    ├─ CIDR: %s\n", iface.CIDR)
+			fmt.Printf("    ├─ Port ID: %s\n", iface.PortID)
+			fmt.Printf("    ├─ Network ID: %s\n", iface.NetworkID)
+			fmt.Printf("    ├─ CR: %s/%s\n", iface.CRNamespace, iface.CRName)
+			fmt.Printf("    ├─ Netplan Applied: %t\n", iface.NetplanSuccess)
+			fmt.Printf("    └─ Status: %s\n", iface.Status)
 		}
 		fmt.Println()
+	}
+
+	// UpdateNetplanSuccess 기능 테스트
+	fmt.Println("=== 🔧 Testing UpdateNetplanSuccess ===")
+	if len(testNodes) > 0 {
+		interfaces, err := dbClient.GetNodeInterfaces(testNodes[0])
+		if err == nil && len(interfaces) > 0 {
+			testInterface := interfaces[0]
+			fmt.Printf("Updating netplan success for port %s...\n", testInterface.PortID)
+
+			// true로 업데이트
+			err := dbClient.UpdateNetplanSuccess(testInterface.PortID, true)
+			if err != nil {
+				log.Printf("Failed to update netplan success: %v", err)
+			} else {
+				fmt.Printf("✅ Successfully updated netplan success to true\n")
+			}
+		}
 	}
 }

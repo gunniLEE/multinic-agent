@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: multinic-system
+  labels:
+    name: multinic-system
+    app.kubernetes.io/name: multinic-agent
+    app.kubernetes.io/component: system 

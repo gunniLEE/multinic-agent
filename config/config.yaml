@@ -4,11 +4,11 @@
 
 # 데이터베이스 설정
 database:
-  host: "localhost"
-  port: 3306
+  host: "172.18.0.228"
+  port: 30305
   username: "root"
-  password: "qudrjs1245!"
-  database: "multinic_db"
+  password: "cloud1234"
+  database: "multinic"
   # MySQL 연결 옵션
   charset: "utf8mb4"
   parse_time: true
@@ -23,7 +23,7 @@ agent:
   # 재시도 간격 (초)
   retry_interval: 5
   # 노드 이름 (DaemonSet에서는 Downward API로 주입)
-  node_name: "worker-node-1"
+  node_name: "tg-cluster-2"
 
 # Kubernetes 설정
 kubernetes:

@@ -133,6 +133,21 @@ func processNetworkInterfaces(cfg *config.Config, dbClient *database.Client, log
 		zap.Int("count", len(interfaces)),
 	)
 
+	// 인터페이스 정보 로그 출력
+	for _, iface := range interfaces {
+		logger.Debug("Interface details",
+			zap.String("subnet_name", iface.SubnetName),
+			zap.String("cidr", iface.CIDR),
+			zap.String("mac_address", iface.MacAddress),
+			zap.String("port_id", iface.PortID),
+			zap.String("network_id", iface.NetworkID),
+			zap.String("cr_namespace", iface.CRNamespace),
+			zap.String("cr_name", iface.CRName),
+			zap.Bool("netplan_success", iface.NetplanSuccess),
+			zap.String("status", iface.Status),
+		)
+	}
+
 	// TODO: Netplan 파일 생성
 	// TODO: Netplan 적용
 	// TODO: K8s 노드 레이블/어노테이션 업데이트
