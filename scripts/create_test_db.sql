@@ -1,7 +1,7 @@
 -- 데이터베이스 생성
-CREATE DATABASE IF NOT EXISTS multinic_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS multinic CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-USE multinic_db;
+USE multinic;
 
 -- 기존 테이블 삭제 (스키마 변경으로 인한)
 DROP TABLE IF EXISTS cr_state;

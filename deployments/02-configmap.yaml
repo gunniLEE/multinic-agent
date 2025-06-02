@@ -11,7 +11,7 @@ data:
   DB_HOST: "mysql.multinic-system.svc.cluster.local"
   DB_PORT: "3306"
   DB_USERNAME: "multinic"
-  DB_DATABASE: "multinic_db"
+  DB_DATABASE: "multinic"
   DB_CHARSET: "utf8mb4"
   DB_PARSE_TIME: "true"
   DB_LOC: "UTC"

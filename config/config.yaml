@@ -4,10 +4,10 @@
 
 # 데이터베이스 설정
 database:
-  host: "172.18.0.228"
-  port: 30305
+  host: "localhost"
+  port: 3306
   username: "root"
-  password: "cloud1234"
+  password: "qudrjs1245!"
   database: "multinic"
   # MySQL 연결 옵션
   charset: "utf8mb4"
