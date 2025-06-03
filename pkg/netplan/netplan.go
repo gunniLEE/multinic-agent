@@ -3,7 +3,6 @@ package netplan
 import (
 	"bytes"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,23 +25,17 @@ type NetworkConfig struct {
 }
 
 type EthernetInterface struct {
-	Match       *MatchConfig `yaml:"match,omitempty"`
-	SetName     string       `yaml:"set-name,omitempty"`
-	Addresses   []string     `yaml:"addresses,omitempty"`
-	Routes      []Route      `yaml:"routes,omitempty"`
-	Nameservers *Nameservers `yaml:"nameservers,omitempty"`
-	DHcp4       *bool        `yaml:"dhcp4,omitempty"`
-	DHcp6       *bool        `yaml:"dhcp6,omitempty"`
+	Match     *MatchConfig `yaml:"match,omitempty"`
+	SetName   string       `yaml:"set-name,omitempty"`
+	DHCP4     *bool        `yaml:"dhcp4,omitempty"`
+	MTU       int          `yaml:"mtu,omitempty"`
+	Addresses []string     `yaml:"addresses,omitempty"`
+	Routes    []Route      `yaml:"routes,omitempty"`
 }
 
 type MatchConfig struct {
 	MACAddress string `yaml:"macaddress,omitempty"`
 	Driver     string `yaml:"driver,omitempty"`
-}
-
-type Nameservers struct {
-	Addresses []string `yaml:"addresses,omitempty"`
-	Search    []string `yaml:"search,omitempty"`
 }
 
 type Route struct {
@@ -88,112 +81,31 @@ func (nm *NetplanManager) GenerateNetplanConfig(nodeName string, interfaces []In
 	config := &NetplanConfig{
 		Network: NetworkConfig{
 			Version:   2,
-			Renderer:  "networkd",
 			Ethernets: make(map[string]EthernetInterface),
 		},
 	}
 
-	var hasDefaultRoute bool
-
 	for i, iface := range interfaces {
 		interfaceName := fmt.Sprintf("eth%d", i+1) // eth1, eth2, etc.
 
-		// Parse CIDR to get network address
-		_, ipNet, err := net.ParseCIDR(iface.CIDR)
-		if err != nil {
-			nm.logger.Error("Failed to parse CIDR",
-				zap.String("cidr", iface.CIDR),
-				zap.String("port_id", iface.PortID),
-				zap.Error(err))
-			continue
-		}
-
-		// Generate IP address within the subnet
-		hostIP := nm.generateHostIP(ipNet)
-
+		dhcp4 := true
 		ethernet := EthernetInterface{
 			Match: &MatchConfig{
 				MACAddress: strings.ToLower(iface.MACAddress),
 			},
-			SetName:   interfaceName,
-			Addresses: []string{fmt.Sprintf("%s/%d", hostIP, nm.getCIDRPrefix(iface.CIDR))},
-		}
-
-		// Management network에 대해서만 기본 라우트 설정 (첫 번째이거나 이름에 mgmt 포함)
-		isManagementNetwork := i == 0 || strings.Contains(strings.ToLower(iface.SubnetName), "mgmt") || strings.Contains(strings.ToLower(iface.SubnetName), "management")
-
-		if isManagementNetwork && !hasDefaultRoute {
-			gatewayIP := nm.generateGateway(ipNet)
-			ethernet.Routes = []Route{
-				{
-					To:     "0.0.0.0/0",
-					Via:    gatewayIP,
-					Metric: 100,
-				},
-			}
-			ethernet.Nameservers = &Nameservers{
-				Addresses: nm.nameservers,
-			}
-			hasDefaultRoute = true
-
-			nm.logger.Info("Configured default route for management interface",
-				zap.String("interface", interfaceName),
-				zap.String("gateway", gatewayIP))
+			SetName: interfaceName,
+			DHCP4:   &dhcp4,
+			MTU:     1450,
 		}
 
 		config.Network.Ethernets[interfaceName] = ethernet
+
+		nm.logger.Info("Configured interface for DHCP",
+			zap.String("interface", interfaceName),
+			zap.String("mac", iface.MACAddress))
 	}
 
 	return config, nil
-}
-
-// generateHostIP generates a host IP within the given network
-func (nm *NetplanManager) generateHostIP(ipNet *net.IPNet) string {
-	// Get network address
-	network := ipNet.IP.Mask(ipNet.Mask)
-
-	// Add 10 to the network address for host IP
-	// For example: 10.0.0.0/24 -> 10.0.0.10
-	//              192.168.1.0/24 -> 192.168.1.10
-	ip := make(net.IP, len(network))
-	copy(ip, network)
-
-	// Add 10 to the last octet
-	if len(ip) >= 4 {
-		ip[len(ip)-1] += 10
-	}
-
-	return ip.String()
-}
-
-// generateGateway generates gateway IP (usually .1 in the subnet)
-func (nm *NetplanManager) generateGateway(ipNet *net.IPNet) string {
-	// Get network address
-	network := ipNet.IP.Mask(ipNet.Mask)
-
-	// Add 1 to the network address for gateway
-	// For example: 10.0.0.0/24 -> 10.0.0.1
-	//              192.168.1.0/24 -> 192.168.1.1
-	ip := make(net.IP, len(network))
-	copy(ip, network)
-
-	// Add 1 to the last octet
-	if len(ip) >= 4 {
-		ip[len(ip)-1] += 1
-	}
-
-	return ip.String()
-}
-
-// getCIDRPrefix extracts the prefix length from CIDR notation
-func (nm *NetplanManager) getCIDRPrefix(cidr string) int {
-	_, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return 24 // Default to /24
-	}
-
-	prefix, _ := ipNet.Mask.Size()
-	return prefix
 }
 
 // WriteNetplanFile writes the netplan configuration to a file
@@ -387,6 +299,11 @@ func (nm *NetplanManager) ProcessInterfaces(nodeName string, interfaces []Interf
 		zap.String("node", nodeName),
 		zap.Int("interface_count", len(interfaces)))
 
+	// Debug: Check actual host interfaces before generating config
+	if err := nm.debugHostInterfaces(); err != nil {
+		nm.logger.Warn("Failed to debug host interfaces", zap.Error(err))
+	}
+
 	// Generate netplan configuration
 	config, err := nm.GenerateNetplanConfig(nodeName, interfaces)
 	if err != nil {
@@ -491,4 +408,85 @@ func (nm *NetplanManager) applyNetworkManually() error {
 			zap.String("output", stdout.String()))
 		return nil
 	}
+}
+
+// debugHostInterfaces checks and logs actual host network interfaces
+func (nm *NetplanManager) debugHostInterfaces() error {
+	nm.logger.Info("=== Debugging Host Network Interfaces ===")
+
+	// Method 1: Check /sys/class/net
+	if interfaces, err := nm.getSystemInterfaces(); err == nil {
+		for _, iface := range interfaces {
+			nm.logger.Info("Found system interface",
+				zap.String("name", iface.Name),
+				zap.String("mac", iface.MAC),
+				zap.String("state", iface.State))
+		}
+	} else {
+		nm.logger.Warn("Failed to get system interfaces", zap.Error(err))
+	}
+
+	// Method 2: Use ip command if available
+	if nm.isRunningInContainer() && nm.isPrivilegedMode() {
+		nm.logger.Info("Checking interfaces using ip command in host namespace...")
+		cmd := exec.Command("nsenter", "-t", "1", "-n", "ip", "link", "show")
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		if err := cmd.Run(); err != nil {
+			nm.logger.Warn("Failed to run ip link show",
+				zap.Error(err),
+				zap.String("stderr", stderr.String()))
+		} else {
+			nm.logger.Info("Host network interfaces (ip link show)",
+				zap.String("output", stdout.String()))
+		}
+	}
+
+	return nil
+}
+
+// SystemInterface represents a system network interface
+type SystemInterface struct {
+	Name  string
+	MAC   string
+	State string
+}
+
+// getSystemInterfaces reads network interfaces from /sys/class/net
+func (nm *NetplanManager) getSystemInterfaces() ([]SystemInterface, error) {
+	var interfaces []SystemInterface
+
+	netDir := "/sys/class/net"
+	entries, err := os.ReadDir(netDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s: %w", netDir, err)
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+
+		// Skip loopback and virtual interfaces
+		if name == "lo" || strings.HasPrefix(name, "veth") || strings.HasPrefix(name, "docker") {
+			continue
+		}
+
+		mac, _ := os.ReadFile(filepath.Join(netDir, name, "address"))
+		state, _ := os.ReadFile(filepath.Join(netDir, name, "operstate"))
+
+		iface := SystemInterface{
+			Name:  name,
+			MAC:   strings.TrimSpace(string(mac)),
+			State: strings.TrimSpace(string(state)),
+		}
+
+		interfaces = append(interfaces, iface)
+	}
+
+	return interfaces, nil
 }

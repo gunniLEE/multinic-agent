@@ -15,11 +15,11 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o multinic-agent cmd/agent/main.go
 
 # Runtime stage - Ubuntu로 변경
-FROM ubuntu:22.04
+FROM ubuntu:22.04 as final
 
 # 필요한 패키지 설치
 RUN apt-get update && \
-    apt-get install -y ca-certificates netplan.io && \
+    apt-get install -y ca-certificates netplan.io udev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
