@@ -1,40 +1,42 @@
 #!/bin/bash
 
-# Kubernetes 리소스 정리 스크립트
+# MultiNic Agent 통합 정리 스크립트
+# 프로덕션 또는 테스트 환경 선택 가능
 
 set -e
 
-echo "🗑️  Cleaning up MultiNic Agent from Kubernetes..."
-
-# kubectl이 설치되어 있는지 확인
-if ! command -v kubectl &> /dev/null; then
-    echo "❌ kubectl is not installed or not in PATH"
+# 사용법 출력
+usage() {
+    echo "Usage: $0 [production|test]"
+    echo ""
+    echo "Environments:"
+    echo "  production  - Cleanup agent only"
+    echo "  test        - Cleanup agent and MariaDB"
+    echo ""
+    echo "Examples:"
+    echo "  $0 production"
+    echo "  $0 test"
     exit 1
+}
+
+# 인수 확인
+if [ $# -ne 1 ]; then
+    usage
 fi
 
-# 리소스 삭제 (역순으로)
-echo "🔄 Deleting DaemonSet..."
-kubectl delete -f deployments/05-daemonset.yaml --ignore-not-found=true
+ENVIRONMENT=$1
 
-echo "👤 Deleting RBAC..."
-kubectl delete -f deployments/04-rbac.yaml --ignore-not-found=true
-
-echo "🔐 Deleting secret..."
-kubectl delete -f deployments/03-secret.yaml --ignore-not-found=true
-
-echo "🗂️  Deleting configmap..."
-kubectl delete -f deployments/02-configmap.yaml --ignore-not-found=true
-
-echo "📍 Deleting namespace..."
-kubectl delete -f deployments/01-namespace.yaml --ignore-not-found=true
-
-echo ""
-echo "✅ Cleanup completed!"
-
-# 확인
-echo "📊 Verifying cleanup:"
-if kubectl get namespace multinic-system &> /dev/null; then
-    echo "⚠️  Namespace still exists (may take a moment to fully delete)"
-else
-    echo "✅ All resources deleted successfully"
-fi 
+case $ENVIRONMENT in
+    production)
+        echo "🏭 Starting production cleanup..."
+        exec ./scripts/cleanup-production.sh
+        ;;
+    test)
+        echo "🧪 Starting test environment cleanup..."
+        exec ./scripts/cleanup-test.sh
+        ;;
+    *)
+        echo "❌ Invalid environment: $ENVIRONMENT"
+        usage
+        ;;
+esac 

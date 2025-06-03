@@ -1,52 +1,42 @@
 #!/bin/bash
 
-# Kubernetes 배포 스크립트
+# MultiNic Agent 통합 배포 스크립트
+# 프로덕션 또는 테스트 환경 선택 가능
 
 set -e
 
-echo "🚀 Deploying MultiNic Agent to Kubernetes..."
-
-# kubectl이 설치되어 있는지 확인
-if ! command -v kubectl &> /dev/null; then
-    echo "❌ kubectl is not installed or not in PATH"
+# 사용법 출력
+usage() {
+    echo "Usage: $0 [production|test]"
+    echo ""
+    echo "Environments:"
+    echo "  production  - Deploy agent only (requires external database)"
+    echo "  test        - Deploy agent with MariaDB (for testing)"
+    echo ""
+    echo "Examples:"
+    echo "  $0 production"
+    echo "  $0 test"
     exit 1
+}
+
+# 인수 확인
+if [ $# -ne 1 ]; then
+    usage
 fi
 
-# Kubernetes 연결 확인
-if ! kubectl cluster-info &> /dev/null; then
-    echo "❌ Cannot connect to Kubernetes cluster"
-    exit 1
-fi
+ENVIRONMENT=$1
 
-echo "✅ Kubernetes connection verified"
-
-# 매니페스트 적용
-echo "📁 Applying manifests..."
-
-echo "  📍 Creating namespace..."
-kubectl apply -f deployments/01-namespace.yaml
-
-echo "  🗂️  Creating configmap..."
-kubectl apply -f deployments/02-configmap.yaml
-
-echo "  🔐 Creating secret..."
-kubectl apply -f deployments/03-secret.yaml
-
-echo "  👤 Creating RBAC..."
-kubectl apply -f deployments/04-rbac.yaml
-
-echo "  🔄 Creating DaemonSet..."
-kubectl apply -f deployments/05-daemonset.yaml
-
-echo ""
-echo "✅ Deployment completed!"
-echo ""
-echo "📊 Checking deployment status:"
-kubectl get all -n multinic-system
-
-echo ""
-echo "🔍 To view logs:"
-echo "   kubectl logs -f daemonset/multinic-agent -n multinic-system"
-echo ""
-echo "🗑️  To cleanup:"
-echo "   ./scripts/cleanup.sh" 
+case $ENVIRONMENT in
+    production)
+        echo "🏭 Starting production deployment..."
+        exec ./scripts/deploy-production.sh
+        ;;
+    test)
+        echo "🧪 Starting test environment deployment..."
+        exec ./scripts/deploy-test.sh
+        ;;
+    *)
+        echo "❌ Invalid environment: $ENVIRONMENT"
+        usage
+        ;;
+esac 

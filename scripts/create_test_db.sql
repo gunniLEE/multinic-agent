@@ -73,14 +73,20 @@ INSERT INTO multi_subnet (subnet_id, subnet_name, cidr, network_id, created_at, 
 ('data-subnet-2-uuid', 'Data Network 2', '192.168.2.0/24', 'data-network-2-openstack-id', NOW(), NOW()),
 ('data-subnet-3-uuid', 'Data Network 3', '192.168.3.0/24', 'data-network-3-openstack-id', NOW(), NOW());
 
--- 노드 데이터
+-- 노드 데이터 (실제 클러스터 노드 포함)
 INSERT INTO node_table (attached_node_id, attached_node_name, created_at, modified_at) VALUES
+('cluster2-control-plane-uuid', 'cluster2-control-plane', NOW(), NOW()),
 ('node-1-uuid', 'worker-node-1', NOW(), NOW()),
 ('node-2-uuid', 'worker-node-2', NOW(), NOW()),
 ('node-3-uuid', 'worker-node-3', NOW(), NOW());
 
 -- 인터페이스 데이터
 INSERT INTO multi_interface (port_id, subnet_id, macaddress, attached_node_id, attached_node_name, cr_namespace, cr_name, netplan_success, created_at, modified_at) VALUES
+-- cluster2-control-plane의 인터페이스들 (실제 클러스터 노드)
+('port-cp-1-uuid', 'mgmt-subnet-uuid', 'fa:16:3e:01:01:01', 'cluster2-control-plane-uuid', 'cluster2-control-plane', 'openstack-system', 'test-config-cp', 0, NOW(), NOW()),
+('port-cp-2-uuid', 'data-subnet-1-uuid', 'fa:16:3e:01:01:02', 'cluster2-control-plane-uuid', 'cluster2-control-plane', 'openstack-system', 'test-config-cp', 0, NOW(), NOW()),
+('port-cp-3-uuid', 'data-subnet-2-uuid', 'fa:16:3e:01:01:03', 'cluster2-control-plane-uuid', 'cluster2-control-plane', 'openstack-system', 'test-config-cp', 0, NOW(), NOW()),
+
 -- worker-node-1의 인터페이스들
 ('port-1-1-uuid', 'mgmt-subnet-uuid', 'fa:16:3e:11:11:11', 'node-1-uuid', 'worker-node-1', 'openstack-system', 'test-config-1', 1, NOW(), NOW()),
 ('port-1-2-uuid', 'data-subnet-1-uuid', 'fa:16:3e:22:22:22', 'node-1-uuid', 'worker-node-1', 'openstack-system', 'test-config-1', 0, NOW(), NOW()),
@@ -94,6 +100,7 @@ INSERT INTO multi_interface (port_id, subnet_id, macaddress, attached_node_id, a
 
 -- CR 상태 데이터
 INSERT INTO cr_state (cr_namespace, cr_name, spec_hash) VALUES
+('openstack-system', 'test-config-cp', 'cp123abc456def'),
 ('openstack-system', 'test-config-1', 'abc123def456789'),
 ('openstack-system', 'test-config-2', 'def456ghi789abc');
 

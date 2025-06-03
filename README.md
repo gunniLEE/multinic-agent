@@ -1,146 +1,196 @@
 # MultiNic Agent
 
-OpenStack 환경에서 VM의 네트워크 인터페이스를 자동으로 구성하는 에이전트
+OpenStack VM 환경에서 네트워크 인터페이스를 자동으로 구성하는 Kubernetes DaemonSet 에이전트입니다.
 
-## 프로젝트 개요
-- OpenStack에서 VM에 attach한 인터페이스를 자동으로 감지하고 설정
-- Netplan 파일을 자동으로 생성/적용
-- Kubernetes 노드의 label/annotation에 인터페이스 정보 자동 업데이트
-- DaemonSet으로 배포 예정
+## 개요
 
-## 현재 진행 상황 (2025-06-02)
-- ✅ 프로젝트 구조 설정
-- ✅ 설정 관리 모듈 (YAML/환경변수 지원)
-- ✅ 로거 구현 (zap 사용, JSON/Text 포맷)
-- ✅ MySQL DB 연결 모듈
-- ✅ 새로운 스키마 적용 (multi_subnet, node_table, multi_interface, cr_state)
-- ✅ 메인 루프 구조 (30초마다 DB 체크)
-- ✅ Netplan success 상태 업데이트 기능
-- ✅ Docker 이미지 빌드 (Ubuntu 22.04 + netplan.io)
-- ✅ Kubernetes 매니페스트 작성 (Namespace, ConfigMap, Secret, RBAC, DaemonSet)
-- ✅ 배포 스크립트 작성 (build, deploy, cleanup)
-- ✅ DaemonSet 배포 성공 (현재 DB 연결 이슈로 Pod CrashLoopBackOff)
-- 🔲 Netplan 파일 생성/적용 모듈
-- 🔲 Kubernetes 클라이언트 (노드 label/annotation 업데이트)
+OpenStack에서 VM에 추가된 네트워크 인터페이스가 자동으로 VM 내부에 반영되지 않는 문제를 해결합니다. 이 에이전트는 관리 클러스터의 데이터베이스에서 네트워크 인터페이스 정보를 읽어와 netplan 파일을 자동으로 생성하고 적용합니다.
+
+## 프로젝트 구조
+
+```
+multinic-agent/
+├── cmd/
+│   └── agent/
+│       └── main.go                 # 에이전트 메인 애플리케이션
+├── pkg/
+│   ├── config/
+│   │   └── config.go              # 구성 관리
+│   ├── database/
+│   │   └── database.go            # 데이터베이스 연결 및 쿼리
+│   └── logger/
+│       └── logger.go              # 로깅 설정
+├── config/
+│   ├── config.yaml               # 로컬 개발용 설정
+│   └── config.example.yaml       # 설정 템플릿
+├── deployments/
+│   ├── production/               # 프로덕션 환경용 매니페스트
+│   │   ├── 01-namespace.yaml
+│   │   ├── 02-configmap.yaml
+│   │   ├── 03-secret.yaml
+│   │   ├── 04-rbac.yaml
+│   │   └── 05-daemonset.yaml
+│   └── test-db/                  # 테스트 환경용 DB 매니페스트
+│       ├── 06-mariadb-configmap.yaml
+│       ├── 07-mariadb-secret.yaml
+│       ├── 08-mariadb-service.yaml
+│       └── 09-mariadb-statefulset.yaml
+├── scripts/
+│   ├── deploy.sh                 # 통합 배포 스크립트
+│   ├── cleanup.sh               # 통합 정리 스크립트
+│   ├── deploy-production.sh     # 프로덕션 배포
+│   ├── deploy-test.sh          # 테스트 환경 배포
+│   ├── cleanup-production.sh   # 프로덕션 정리
+│   ├── cleanup-test.sh         # 테스트 환경 정리
+│   ├── build-image.sh          # Docker 이미지 빌드
+│   └── create_test_db.sql      # 로컬 테스트 DB 설정
+├── Dockerfile
+├── go.mod
+└── README.md
+```
+
+## 배포 환경
+
+### 프로덕션 환경
+- **용도**: 실제 운영 환경
+- **데이터베이스**: 외부 MariaDB/MySQL 사용
+- **포함 리소스**: Agent DaemonSet, ConfigMap, Secret, RBAC
+
+### 테스트 환경
+- **용도**: 개발 및 테스트
+- **데이터베이스**: 내장 MariaDB 사용 (테스트 데이터 포함)
+- **포함 리소스**: Agent + MariaDB StatefulSet + 모든 의존성
+
+## 빠른 시작
+
+### 1. 테스트 환경 배포
+
+```bash
+# 테스트 환경 배포 (내장 MariaDB 포함)
+./scripts/deploy.sh test
+
+# 또는 직접 실행
+./scripts/deploy-test.sh
+```
+
+### 2. 프로덕션 환경 배포
+
+```bash
+# 프로덕션 환경 배포 (외부 DB 필요)
+./scripts/deploy.sh production
+
+# 또는 직접 실행
+./scripts/deploy-production.sh
+```
+
+### 3. 배포 확인
+
+```bash
+# Pod 상태 확인
+kubectl get pods -n multinic-system
+
+# 에이전트 로그 확인
+kubectl logs -f daemonset/multinic-agent -n multinic-system
+
+# 테스트 환경의 경우 MariaDB 로그도 확인 가능
+kubectl logs -f statefulset/mariadb -n multinic-system
+```
+
+### 4. 정리
+
+```bash
+# 테스트 환경 정리
+./scripts/cleanup.sh test
+
+# 프로덕션 환경 정리
+./scripts/cleanup.sh production
+```
+
+## 설정
+
+### 프로덕션 환경 설정
+
+프로덕션 배포 전에 `deployments/production/02-configmap.yaml`과 `deployments/production/03-secret.yaml`을 수정하여 외부 데이터베이스 연결 정보를 설정하세요.
+
+#### ConfigMap 설정
+```yaml
+# deployments/production/02-configmap.yaml
+DB_HOST: "your-mysql-host"
+DB_PORT: "3306"
+DB_NAME: "multinic"
+DB_USERNAME: "your-username"
+```
+
+#### Secret 설정
+```yaml
+# deployments/production/03-secret.yaml
+data:
+  DB_PASSWORD: "<base64-encoded-password>"
+```
+
+### 로컬 개발 환경
+
+```bash
+# 로컬 MariaDB 설정 (로컬 개발용)
+mysql -u root -p < scripts/create_test_db.sql
+
+# 로컬 실행
+go run cmd/agent/main.go
+```
 
 ## 데이터베이스 스키마
-### multi_subnet
-- subnet_id, subnet_name, cidr, network_id (OpenStack)
-- status, 생성/수정/삭제 시간
 
-### node_table  
-- attached_node_id, attached_node_name (UNIQUE)
-- status, 생성/수정/삭제 시간
+### 테이블 구조
 
-### multi_interface
-- port_id (UNIQUE), subnet_id, macaddress
-- attached_node_id, attached_node_name
-- cr_namespace, cr_name (OpenstackConfig CR 정보)
-- netplan_success (적용 상태 추적)
-- status, 생성/수정/삭제 시간
+1. **multi_subnet**: 서브넷 정보 (CIDR 포함)
+2. **node_table**: 노드 정보
+3. **multi_interface**: 인터페이스 정보 (MAC, 포트 ID 등)
+4. **cr_state**: CR 변경 추적
 
-### cr_state
-- cr_namespace, cr_name, spec_hash
-- CR 변경사항 추적용
+### 샘플 데이터
 
-## Docker & Kubernetes 배포
+테스트 환경에는 다음 노드들의 샘플 데이터가 포함됩니다:
+- `cluster2-control-plane` (실제 클러스터 노드)
+- `worker-node-1`, `worker-node-2`, `worker-node-3` (샘플 노드)
 
-### 프로젝트 구조
-```
-.
-├── Dockerfile                     # 멀티스테이지 빌드 (Go 1.23 + Ubuntu 22.04)
-├── DEPLOYMENT.md                  # 배포 가이드
-├── deployments/
-│   ├── 01-namespace.yaml         # multinic-system 네임스페이스
-│   ├── 02-configmap.yaml         # 에이전트 설정
-│   ├── 03-secret.yaml            # DB 비밀번호
-│   ├── 04-rbac.yaml              # ServiceAccount, ClusterRole, ClusterRoleBinding
-│   └── 05-daemonset.yaml         # DaemonSet (hostNetwork, privileged)
-└── scripts/
-    ├── build-image.sh            # Docker 이미지 빌드
-    ├── deploy.sh                 # Kubernetes 배포
-    └── cleanup.sh                # 리소스 정리
-```
+## 모니터링
 
-### 빠른 시작
+### 로그 확인
 ```bash
-# 1. Docker 이미지 빌드
+# 에이전트 로그 (실시간)
+kubectl logs -f daemonset/multinic-agent -n multinic-system
+
+# MariaDB 로그 (테스트 환경)
+kubectl logs -f statefulset/mariadb -n multinic-system
+```
+
+### 데이터베이스 접속 (테스트 환경)
+```bash
+# MariaDB 접속
+kubectl exec -it mariadb-0 -n multinic-system -- mysql -u root -p
+
+# 인터페이스 데이터 확인
+USE multinic;
+SELECT n.attached_node_name, mi.port_id, ms.subnet_name, ms.cidr 
+FROM multi_interface mi
+JOIN node_table n ON mi.attached_node_id = n.attached_node_id
+JOIN multi_subnet ms ON mi.subnet_id = ms.subnet_id
+WHERE mi.status = 'active';
+```
+
+## 개발
+
+### Docker 이미지 빌드
+```bash
 ./scripts/build-image.sh
-
-# 2. Kubernetes 배포
-./scripts/deploy.sh
-
-# 3. 상태 확인
-kubectl get all -n multinic-system
-kubectl logs -f daemonset/multinic-agent -n multinic-system
-
-# 4. 정리
-./scripts/cleanup.sh
 ```
 
-### DaemonSet 특징
-- **hostNetwork**: 호스트 네트워크 직접 접근
-- **privileged**: NET_ADMIN/SYS_ADMIN 권한
-- **tolerations**: 모든 노드에 스케줄링 가능
-- **volumeMounts**: `/etc/netplan`, `/var/backups/netplan` 호스트 마운트
-- **환경변수**: ConfigMap/Secret을 통한 설정 주입
+### 요구사항
+- Go 1.23+
+- Docker
+- Kubernetes 클러스터
+- kubectl
 
-## 테스트 환경
-- MySQL DB: `multinic_db` (localhost:3306)
-- 테스트 데이터: worker-node-1, worker-node-2의 네트워크 인터페이스 정보
-- Management Network: 이미 적용됨 (netplan_success=1)
-- Data Networks: 적용 대기 (netplan_success=0)
+## 라이선스
 
-## 실행 방법
-
-### 로컬 개발
-```bash
-# 설정 파일과 함께 실행
-./multinic-agent --config config/config.yaml
-
-# DB 테스트
-go run cmd/test-db/main.go
-
-# 스키마 재생성
-/usr/local/mysql/bin/mysql -u root -pqudrjs1245! < scripts/create_test_db.sql
-```
-
-### Kubernetes 배포
-```bash
-# 전체 빌드 및 배포
-./scripts/build-image.sh && ./scripts/deploy.sh
-
-# 상태 모니터링
-kubectl get pods -n multinic-system -w
-kubectl logs -f daemonset/multinic-agent -n multinic-system
-
-# 설정 수정
-kubectl edit configmap multinic-agent-config -n multinic-system
-kubectl rollout restart daemonset/multinic-agent -n multinic-system
-```
-
-## 트러블슈팅
-
-### 일반적인 문제들
-1. **CrashLoopBackOff**: DB 연결 실패 (ConfigMap의 DB_HOST 확인)
-2. **ImagePullBackOff**: 로컬 이미지 없음 (`./scripts/build-image.sh` 실행)
-3. **권한 오류**: ServiceAccount/RBAC 설정 확인
-
-### 문제 해결
-```bash
-# 로그 확인
-kubectl logs $(kubectl get pods -n multinic-system -o name) -n multinic-system
-
-# DB 연결 테스트
-kubectl exec -it $(kubectl get pods -n multinic-system -o name | cut -d/ -f2) -n multinic-system -- nc -zv mysql.multinic-system.svc.cluster.local 3306
-
-# 설정 확인
-kubectl describe configmap multinic-agent-config -n multinic-system
-kubectl describe secret multinic-agent-secret -n multinic-system
-```
-
-## 다음 작업
-1. **DB 연결 문제 해결** (클러스터 내 MySQL 배포 또는 외부 DB 연결)
-2. **Netplan 모듈 개발** (CIDR 기반 YAML 생성)
-3. **K8s 클라이언트 통합** (노드 label/annotation 업데이트)
-4. **프로덕션 배포 최적화** (Health Check, Resource Limits, Monitoring) 
+MIT License 
