@@ -14,6 +14,7 @@ import (
 	"github.com/ibyeong-geon/multinic-agent/internal/config"
 	"github.com/ibyeong-geon/multinic-agent/pkg/database"
 	"github.com/ibyeong-geon/multinic-agent/pkg/logger"
+	"github.com/ibyeong-geon/multinic-agent/pkg/netplan"
 )
 
 func main() {
@@ -148,9 +149,69 @@ func processNetworkInterfaces(cfg *config.Config, dbClient *database.Client, log
 		)
 	}
 
-	// TODO: Netplan 파일 생성
-	// TODO: Netplan 적용
-	// TODO: K8s 노드 레이블/어노테이션 업데이트
+	// Netplan 기능 적용
+	success := processNetplanConfiguration(nodeName, interfaces, logger)
+
+	// 처리 결과를 DB에 업데이트
+	if err := updateNetplanStatus(dbClient, nodeName, interfaces, success, logger); err != nil {
+		logger.Error("Failed to update netplan status in database", zap.Error(err))
+	}
+
+	return nil
+}
+
+// processNetplanConfiguration processes netplan configuration for the given interfaces
+func processNetplanConfiguration(nodeName string, interfaces []database.NodeInterface, logger *zap.Logger) bool {
+	// NetplanManager 생성 (DRY_RUN 환경변수로 제어)
+	dryRun := os.Getenv("DRY_RUN") == "true"
+	if dryRun {
+		logger.Info("Running in DRY RUN mode - netplan files will not be applied")
+	}
+
+	netplanManager := netplan.NewNetplanManager(logger, dryRun)
+
+	// database.NodeInterface를 netplan.InterfaceData로 변환
+	netplanInterfaces := make([]netplan.InterfaceData, 0, len(interfaces))
+	for _, iface := range interfaces {
+		netplanInterfaces = append(netplanInterfaces, netplan.InterfaceData{
+			PortID:         iface.PortID,
+			MACAddress:     iface.MacAddress,
+			SubnetName:     iface.SubnetName,
+			CIDR:           iface.CIDR,
+			NetworkID:      iface.NetworkID,
+			NetplanSuccess: iface.NetplanSuccess,
+		})
+	}
+
+	// Netplan 구성 처리
+	if err := netplanManager.ProcessInterfaces(nodeName, netplanInterfaces); err != nil {
+		logger.Error("Failed to process netplan configuration",
+			zap.String("node", nodeName),
+			zap.Error(err))
+		return false
+	}
+
+	return true
+}
+
+// updateNetplanStatus updates the netplan status in the database
+func updateNetplanStatus(dbClient *database.Client, nodeName string, interfaces []database.NodeInterface, success bool, logger *zap.Logger) error {
+	for _, iface := range interfaces {
+		// 상태가 변경된 경우에만 업데이트
+		if iface.NetplanSuccess != success {
+			if err := dbClient.UpdateNetplanSuccess(iface.PortID, success); err != nil {
+				logger.Error("Failed to update netplan status for interface",
+					zap.String("port_id", iface.PortID),
+					zap.Bool("success", success),
+					zap.Error(err))
+				return err
+			}
+
+			logger.Info("Updated netplan status",
+				zap.String("port_id", iface.PortID),
+				zap.Bool("success", success))
+		}
+	}
 
 	return nil
 }

@@ -19,6 +19,7 @@ spec:
     spec:
       serviceAccountName: multinic-agent
       hostNetwork: true
+      hostPID: true
       dnsPolicy: ClusterFirstWithHostNet
       tolerations:
       - operator: Exists
@@ -35,6 +36,8 @@ spec:
             add:
             - NET_ADMIN
             - SYS_ADMIN
+            - SYS_CHROOT
+            - SYS_PTRACE
         env:
         # Downward API로 노드 이름 주입
         - name: NODE_NAME
@@ -142,6 +145,14 @@ spec:
             configMapKeyRef:
               name: multinic-agent-config
               key: LOG_OUTPUT
+        - name: DRY_RUN
+          valueFrom:
+            configMapKeyRef:
+              name: multinic-agent-config
+              key: DRY_RUN
+        # Privileged 모드 표시
+        - name: PRIVILEGED_MODE
+          value: "true"
         volumeMounts:
         - name: netplan-config
           mountPath: /etc/netplan
@@ -149,6 +160,9 @@ spec:
           mountPath: /var/backups/netplan
         - name: host-run
           mountPath: /run
+        - name: host-proc
+          mountPath: /host/proc
+          readOnly: true
         resources:
           requests:
             memory: "64Mi"
@@ -168,4 +182,8 @@ spec:
       - name: host-run
         hostPath:
           path: /run
+          type: Directory
+      - name: host-proc
+        hostPath:
+          path: /proc
           type: Directory 

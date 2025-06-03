@@ -10,14 +10,14 @@ data:
   # 데이터베이스 설정 (비밀번호 제외)
   DB_HOST: "mysql.multinic-system.svc.cluster.local"
   DB_PORT: "3306"
-  DB_USERNAME: "multinic"
+  DB_USERNAME: "multinic_user"
   DB_DATABASE: "multinic"
   DB_CHARSET: "utf8mb4"
   DB_PARSE_TIME: "true"
   DB_LOC: "UTC"
   
   # 에이전트 설정
-  AGENT_CHECK_INTERVAL: "30"
+  AGENT_CHECK_INTERVAL: "30s"
   AGENT_RETRY_COUNT: "3"
   AGENT_RETRY_INTERVAL: "5"
   
@@ -33,4 +33,5 @@ data:
   # 로깅 설정
   LOG_LEVEL: "info"
   LOG_FORMAT: "json"
-  LOG_OUTPUT: "stdout" 
+  LOG_OUTPUT: "stdout"
+  DRY_RUN: "false"   # 프로덕션에서는 실제 netplan 적용 

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multinic-agent-config
+  namespace: multinic-system
+data:
+  DB_HOST: "mariadb.multinic-system.svc.cluster.local"
+  DB_PORT: "3306"
+  DB_NAME: "multinic"
+  DB_USERNAME: "root"
+  AGENT_CHECK_INTERVAL: "30s"
+  LOG_LEVEL: "debug"
+  DRY_RUN: "false"  # 실제 netplan apply 실행 
