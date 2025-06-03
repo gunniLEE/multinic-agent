@@ -23,7 +23,7 @@ agent:
   # 재시도 간격 (초)
   retry_interval: 5
   # 노드 이름 (DaemonSet에서는 Downward API로 주입)
-  node_name: "tg-cluster-2"
+  node_name: "cluster2-control-plane"
 
 # Kubernetes 설정
 kubernetes:
